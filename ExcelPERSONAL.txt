@@ -1,0 +1,123 @@
+Option Explicit
+
+' ===== 開いているブック全体のコピーを Downloads に出力（元の拡張子を維持） =====
+Public Sub ExportBookToDownloads()
+
+    Dim wb As Workbook
+    Dim folderPath As String, savePath As String, ext As String
+    Dim i As Long
+
+    On Error GoTo ErrHandler
+
+    Set wb = ActiveWorkbook
+    If wb Is Nothing Then
+        MsgBox "ブックが開かれていません。", vbExclamation
+        Exit Sub
+    End If
+
+    folderPath = GetDownloadsFolder()
+    If Dir(folderPath, vbDirectory) = "" Then
+        MsgBox "ダウンロードフォルダが見つかりません:" & vbCrLf & folderPath, vbExclamation
+        Exit Sub
+    End If
+
+    ' 元の拡張子を維持（未保存の新規ブックは .xlsx）
+    i = InStrRev(wb.Name, ".")
+    If i > 1 Then ext = Mid$(wb.Name, i) Else ext = ".xlsx"
+
+    savePath = folderPath & "\" _
+             & SanitizeFileName(BaseName(wb.Name)) & "_" _
+             & Format(Now, "yyyymmdd_hhnnss") & ext
+
+    ' 未保存の編集内容も含めてコピーを書き出す。開いているブックのパスは変わらない
+    wb.SaveCopyAs Filename:=savePath
+
+    MsgBox "出力しました:" & vbCrLf & savePath, vbInformation
+    Exit Sub
+
+ErrHandler:
+    MsgBox "出力に失敗しました。" & vbCrLf & Err.Number & ": " & Err.Description, vbExclamation
+End Sub
+
+
+' ===== ブック全体を「常に .xlsx」で Downloads に出力（VBA・ActiveXは除去される） =====
+Public Sub ExportBookAsXlsxToDownloads()
+
+    Dim wb As Workbook, newBook As Workbook
+    Dim folderPath As String, savePath As String
+
+    On Error GoTo ErrHandler
+
+    Set wb = ActiveWorkbook
+    If wb Is Nothing Then
+        MsgBox "ブックが開かれていません。", vbExclamation
+        Exit Sub
+    End If
+
+    folderPath = GetDownloadsFolder()
+    If Dir(folderPath, vbDirectory) = "" Then
+        MsgBox "ダウンロードフォルダが見つかりません:" & vbCrLf & folderPath, vbExclamation
+        Exit Sub
+    End If
+
+    savePath = folderPath & "\" _
+             & SanitizeFileName(BaseName(wb.Name)) & "_" _
+             & Format(Now, "yyyymmdd_hhnnss") & ".xlsx"
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+
+    wb.Sheets.Copy                ' 全シートを新規ブックへコピー
+    Set newBook = ActiveWorkbook
+    newBook.SaveAs Filename:=savePath, FileFormat:=xlOpenXMLWorkbook
+    newBook.Close SaveChanges:=False
+    Set newBook = Nothing
+
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+
+    MsgBox "出力しました:" & vbCrLf & savePath, vbInformation
+    Exit Sub
+
+ErrHandler:
+    If Not newBook Is Nothing Then newBook.Close SaveChanges:=False
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    MsgBox "出力に失敗しました。" & vbCrLf & Err.Number & ": " & Err.Description, vbExclamation
+End Sub
+
+
+' ===== ダウンロードフォルダのパス取得 =====
+Private Function GetDownloadsFolder() As String
+    Dim p As String
+    On Error Resume Next
+    ' 既定以外の場所に変更されていてもレジストリから正しく取れる
+    p = CreateObject("WScript.Shell").RegRead( _
+        "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\" & _
+        "{374DE290-123F-4565-9164-39C4925E467B}")
+    On Error GoTo 0
+
+    If Len(p) = 0 Then p = Environ$("USERPROFILE") & "\Downloads"
+    If Right$(p, 1) = "\" Then p = Left$(p, Len(p) - 1)
+    GetDownloadsFolder = p
+End Function
+
+
+' ===== 拡張子を除いたファイル名 =====
+Private Function BaseName(ByVal s As String) As String
+    Dim i As Long
+    i = InStrRev(s, ".")
+    If i > 1 Then s = Left$(s, i - 1)
+    BaseName = s
+End Function
+
+
+' ===== ファイル名に使えない文字を置換 =====
+Private Function SanitizeFileName(ByVal s As String) As String
+    Dim bad As Variant, i As Long
+    bad = Array("\", "/", ":", "*", "?", """", "<", ">", "|")
+    For i = LBound(bad) To UBound(bad)
+        s = Replace(s, bad(i), "_")
+    Next i
+    SanitizeFileName = Trim$(s)
+End Function

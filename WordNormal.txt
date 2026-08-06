@@ -1,0 +1,121 @@
+Option Explicit
+
+' ===== 開いている文書のコピーを Downloads に出力（元の形式のまま） =====
+Public Sub ExportDocToDownloads()
+
+    Dim doc As Document
+    Dim folderPath As String, savePath As String, ext As String
+
+    On Error GoTo ErrHandler
+
+    If Documents.Count = 0 Then
+        MsgBox "文書が開かれていません。", vbExclamation
+        Exit Sub
+    End If
+    Set doc = ActiveDocument
+
+    ' 未保存の文書なら、まず保存先を指定してもらう
+    If Len(doc.Path) = 0 Then
+        MsgBox "未保存の文書です。先に保存先を指定してください。", vbInformation
+        doc.Save                      ' キャンセルされた場合は ErrHandler へ
+    End If
+    If Not doc.Saved Then doc.Save    ' 最新の内容をディスクに反映
+
+    folderPath = GetDownloadsFolder()
+    If Dir(folderPath, vbDirectory) = "" Then
+        MsgBox "ダウンロードフォルダが見つかりません:" & vbCrLf & folderPath, vbExclamation
+        Exit Sub
+    End If
+
+    ext = Mid$(doc.Name, InStrRev(doc.Name, "."))   ' ".docx" / ".doc" など
+
+    savePath = folderPath & "\" _
+             & SanitizeFileName(BaseName(doc.Name)) & "_" _
+             & Format(Now, "yyyymmdd_hhnnss") & ext
+
+    FileCopy doc.FullName, savePath   ' 開いている文書には一切影響しない
+
+    MsgBox "出力しました:" & vbCrLf & savePath, vbInformation
+    Exit Sub
+
+ErrHandler:
+    If Err.Number = 4198 Then Exit Sub   ' 保存ダイアログをキャンセルした場合
+    MsgBox "出力に失敗しました。" & vbCrLf & Err.Number & ": " & Err.Description, vbExclamation
+End Sub
+
+
+' ===== 開いている文書を PDF にして Downloads に出力 =====
+Public Sub ExportPdfToDownloads()
+
+    Dim doc As Document
+    Dim folderPath As String, savePath As String
+
+    On Error GoTo ErrHandler
+
+    If Documents.Count = 0 Then
+        MsgBox "文書が開かれていません。", vbExclamation
+        Exit Sub
+    End If
+    Set doc = ActiveDocument
+
+    folderPath = GetDownloadsFolder()
+    If Dir(folderPath, vbDirectory) = "" Then
+        MsgBox "ダウンロードフォルダが見つかりません:" & vbCrLf & folderPath, vbExclamation
+        Exit Sub
+    End If
+
+    savePath = folderPath & "\" _
+             & SanitizeFileName(BaseName(doc.Name)) & "_" _
+             & Format(Now, "yyyymmdd_hhnnss") & ".pdf"
+
+    doc.ExportAsFixedFormat _
+        OutputFileName:=savePath, _
+        ExportFormat:=wdExportFormatPDF, _
+        OpenAfterExport:=False, _
+        OptimizeFor:=wdExportOptimizeForPrint, _
+        Range:=wdExportAllDocument, _
+        Item:=wdExportDocumentContent, _
+        IncludeDocProps:=True, _
+        CreateBookmarks:=wdExportCreateHeadingBookmarks
+
+    MsgBox "出力しました:" & vbCrLf & savePath, vbInformation
+    Exit Sub
+
+ErrHandler:
+    MsgBox "出力に失敗しました。" & vbCrLf & Err.Number & ": " & Err.Description, vbExclamation
+End Sub
+
+
+' ===== ダウンロードフォルダのパス取得 =====
+Private Function GetDownloadsFolder() As String
+    Dim p As String
+    On Error Resume Next
+    p = CreateObject("WScript.Shell").RegRead( _
+        "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\" & _
+        "{374DE290-123F-4565-9164-39C4925E467B}")
+    On Error GoTo 0
+
+    If Len(p) = 0 Then p = Environ$("USERPROFILE") & "\Downloads"
+    If Right$(p, 1) = "\" Then p = Left$(p, Len(p) - 1)
+    GetDownloadsFolder = p
+End Function
+
+
+' ===== 拡張子を除いたファイル名 =====
+Private Function BaseName(ByVal s As String) As String
+    Dim i As Long
+    i = InStrRev(s, ".")
+    If i > 1 Then s = Left$(s, i - 1)
+    BaseName = s
+End Function
+
+
+' ===== ファイル名に使えない文字を置換 =====
+Private Function SanitizeFileName(ByVal s As String) As String
+    Dim bad As Variant, i As Long
+    bad = Array("\", "/", ":", "*", "?", """", "<", ">", "|")
+    For i = LBound(bad) To UBound(bad)
+        s = Replace(s, bad(i), "_")
+    Next i
+    SanitizeFileName = Trim$(s)
+End Function
