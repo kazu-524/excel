@@ -1,5 +1,38 @@
 Option Explicit
 
+' ===== アドイン読み込み時に自動実行され、ボタンを作る =====
+Public Sub Auto_Open()
+
+    Dim bar As CommandBar
+    Dim btn As CommandBarButton
+
+    On Error Resume Next
+    Application.CommandBars("Downloads出力").Delete   ' 二重登録の防止
+    On Error GoTo 0
+
+    Set bar = Application.CommandBars.Add( _
+                  Name:="Downloads出力", _
+                  Position:=msoBarFloating, _
+                  Temporary:=True)
+
+    Set btn = bar.Controls.Add(Type:=msoControlButton)
+    With btn
+        .Caption = "Downloadsへ出力"
+        .OnAction = "ExportPresToDownloads"
+        .Style = msoButtonCaption
+    End With
+
+    Set btn = bar.Controls.Add(Type:=msoControlButton)
+    With btn
+        .Caption = "PDFで出力"
+        .OnAction = "ExportPdfToDownloads"
+        .Style = msoButtonCaption
+    End With
+
+    bar.Visible = True
+End Sub
+
+
 ' ===== 開いているプレゼンのコピーを Downloads に出力（元の拡張子を維持） =====
 Public Sub ExportPresToDownloads()
 
@@ -22,7 +55,6 @@ Public Sub ExportPresToDownloads()
         Exit Sub
     End If
 
-    ' 元の拡張子から保存形式を決める（未保存の新規ファイルは .pptx）
     i = InStrRev(pres.Name, ".")
     If i > 1 Then ext = LCase$(Mid$(pres.Name, i)) Else ext = ".pptx"
 
@@ -37,7 +69,6 @@ Public Sub ExportPresToDownloads()
              & SanitizeFileName(BaseName(pres.Name)) & "_" _
              & Format(Now, "yyyymmdd_hhnnss") & ext
 
-    ' 元ファイルのパスを一切参照しないため、OneDrive上でも動く
     pres.SaveCopyAs FileName:=savePath, FileFormat:=fmt
 
     Exit Sub
