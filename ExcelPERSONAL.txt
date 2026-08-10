@@ -1,19 +1,20 @@
 Option Explicit
 
-' ===== 開いているブック全体のコピーを Downloads に出力（元の拡張子を維持） =====
-Public Sub ExportBookToDownloads()
+' ===== 開いているプレゼンのコピーを Downloads に出力（元の拡張子を維持） =====
+Public Sub ExportPresToDownloads()
 
-    Dim wb As Workbook
+    Dim pres As Presentation
     Dim folderPath As String, savePath As String, ext As String
+    Dim fmt As PpSaveAsFileType
     Dim i As Long
 
     On Error GoTo ErrHandler
 
-    Set wb = ActiveWorkbook
-    If wb Is Nothing Then
-        MsgBox "ブックが開かれていません。", vbExclamation
+    If Application.Presentations.Count = 0 Then
+        MsgBox "プレゼンテーションが開かれていません。", vbExclamation
         Exit Sub
     End If
+    Set pres = ActivePresentation
 
     folderPath = GetDownloadsFolder()
     If Dir(folderPath, vbDirectory) = "" Then
@@ -21,18 +22,24 @@ Public Sub ExportBookToDownloads()
         Exit Sub
     End If
 
-    ' 元の拡張子を維持（未保存の新規ブックは .xlsx）
-    i = InStrRev(wb.Name, ".")
-    If i > 1 Then ext = Mid$(wb.Name, i) Else ext = ".xlsx"
+    ' 元の拡張子から保存形式を決める（未保存の新規ファイルは .pptx）
+    i = InStrRev(pres.Name, ".")
+    If i > 1 Then ext = LCase$(Mid$(pres.Name, i)) Else ext = ".pptx"
+
+    Select Case ext
+        Case ".pptm": fmt = ppSaveAsOpenXMLPresentationMacroEnabled
+        Case ".ppsx": fmt = ppSaveAsOpenXMLShow
+        Case ".ppt":  fmt = ppSaveAsPresentation
+        Case Else:    ext = ".pptx": fmt = ppSaveAsOpenXMLPresentation
+    End Select
 
     savePath = folderPath & "\" _
-             & SanitizeFileName(BaseName(wb.Name)) & "_" _
+             & SanitizeFileName(BaseName(pres.Name)) & "_" _
              & Format(Now, "yyyymmdd_hhnnss") & ext
 
-    ' 未保存の編集内容も含めてコピーを書き出す。開いているブックのパスは変わらない
-    wb.SaveCopyAs Filename:=savePath
+    ' 元ファイルのパスを一切参照しないため、OneDrive上でも動く
+    pres.SaveCopyAs FileName:=savePath, FileFormat:=fmt
 
-    MsgBox "出力しました:" & vbCrLf & savePath, vbInformation
     Exit Sub
 
 ErrHandler:
@@ -40,19 +47,19 @@ ErrHandler:
 End Sub
 
 
-' ===== ブック全体を「常に .xlsx」で Downloads に出力（VBA・ActiveXは除去される） =====
-Public Sub ExportBookAsXlsxToDownloads()
+' ===== 開いているプレゼンを PDF にして Downloads に出力 =====
+Public Sub ExportPdfToDownloads()
 
-    Dim wb As Workbook, newBook As Workbook
+    Dim pres As Presentation
     Dim folderPath As String, savePath As String
 
     On Error GoTo ErrHandler
 
-    Set wb = ActiveWorkbook
-    If wb Is Nothing Then
-        MsgBox "ブックが開かれていません。", vbExclamation
+    If Application.Presentations.Count = 0 Then
+        MsgBox "プレゼンテーションが開かれていません。", vbExclamation
         Exit Sub
     End If
+    Set pres = ActivePresentation
 
     folderPath = GetDownloadsFolder()
     If Dir(folderPath, vbDirectory) = "" Then
@@ -61,28 +68,14 @@ Public Sub ExportBookAsXlsxToDownloads()
     End If
 
     savePath = folderPath & "\" _
-             & SanitizeFileName(BaseName(wb.Name)) & "_" _
-             & Format(Now, "yyyymmdd_hhnnss") & ".xlsx"
+             & SanitizeFileName(BaseName(pres.Name)) & "_" _
+             & Format(Now, "yyyymmdd_hhnnss") & ".pdf"
 
-    Application.ScreenUpdating = False
-    Application.DisplayAlerts = False
+    pres.SaveCopyAs FileName:=savePath, FileFormat:=ppSaveAsPDF
 
-    wb.Sheets.Copy                ' 全シートを新規ブックへコピー
-    Set newBook = ActiveWorkbook
-    newBook.SaveAs Filename:=savePath, FileFormat:=xlOpenXMLWorkbook
-    newBook.Close SaveChanges:=False
-    Set newBook = Nothing
-
-    Application.DisplayAlerts = True
-    Application.ScreenUpdating = True
-
-    MsgBox "出力しました:" & vbCrLf & savePath, vbInformation
     Exit Sub
 
 ErrHandler:
-    If Not newBook Is Nothing Then newBook.Close SaveChanges:=False
-    Application.DisplayAlerts = True
-    Application.ScreenUpdating = True
     MsgBox "出力に失敗しました。" & vbCrLf & Err.Number & ": " & Err.Description, vbExclamation
 End Sub
 
@@ -91,7 +84,6 @@ End Sub
 Private Function GetDownloadsFolder() As String
     Dim p As String
     On Error Resume Next
-    ' 既定以外の場所に変更されていてもレジストリから正しく取れる
     p = CreateObject("WScript.Shell").RegRead( _
         "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\" & _
         "{374DE290-123F-4565-9164-39C4925E467B}")
