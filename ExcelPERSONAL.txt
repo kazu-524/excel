@@ -1,35 +1,12 @@
 Option Explicit
 
-' ===== アドイン読み込み時に自動実行され、ボタンを作る =====
-Public Sub Auto_Open()
+' ===== リボンボタンから呼ばれる入口 =====
+Public Sub RibbonExportPres(control As IRibbonControl)
+    ExportPresToDownloads
+End Sub
 
-    Dim bar As CommandBar
-    Dim btn As CommandBarButton
-
-    On Error Resume Next
-    Application.CommandBars("Downloads出力").Delete   ' 二重登録の防止
-    On Error GoTo 0
-
-    Set bar = Application.CommandBars.Add( _
-                  Name:="Downloads出力", _
-                  Position:=msoBarFloating, _
-                  Temporary:=True)
-
-    Set btn = bar.Controls.Add(Type:=msoControlButton)
-    With btn
-        .Caption = "Downloadsへ出力"
-        .OnAction = "ExportPresToDownloads"
-        .Style = msoButtonCaption
-    End With
-
-    Set btn = bar.Controls.Add(Type:=msoControlButton)
-    With btn
-        .Caption = "PDFで出力"
-        .OnAction = "ExportPdfToDownloads"
-        .Style = msoButtonCaption
-    End With
-
-    bar.Visible = True
+Public Sub RibbonExportPdf(control As IRibbonControl)
+    ExportPdfToDownloads
 End Sub
 
 
@@ -69,6 +46,7 @@ Public Sub ExportPresToDownloads()
              & SanitizeFileName(BaseName(pres.Name)) & "_" _
              & Format(Now, "yyyymmdd_hhnnss") & ext
 
+    ' 元ファイルのパスを参照しないため、OneDrive上のファイルでも動く
     pres.SaveCopyAs FileName:=savePath, FileFormat:=fmt
 
     Exit Sub
